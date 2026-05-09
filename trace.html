@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AgriTrace 區塊鏈溯源查詢</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        .timeline-item::before {
+            content: ""; position: absolute; left: 20px; top: 0; bottom: 0; width: 2px; background: #e2e8f0;
+        }
+        .animate-pulse-slow { animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .7; } }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans pb-10">
+
+    <div id="loading" class="fixed inset-0 bg-white flex flex-col items-center justify-center z-50">
+        <div id="loading-spinner" class="w-16 h-16 border-4 border-green-500 border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p id="loading-text" class="text-gray-500 font-bold">正在讀取區塊鏈存證資料...</p>
+    </div>
+
+    <div class="bg-green-600 text-white p-6 text-center shadow-lg">
+        <div class="inline-block bg-white text-green-600 rounded-full px-4 py-1 text-xs font-black mb-2 shadow-sm">
+            <i class="fas fa-shield-halved mr-1"></i> BLOCKCHAIN VERIFIED
+        </div>
+        <h1 class="text-2xl font-black tracking-tight">產銷履歷數位存證</h1>
+    </div>
+
+    <div class="max-w-md mx-auto mt-6 px-4 space-y-6">
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <div class="flex justify-between items-start mb-4">
+                <div>
+                    <h2 id="p-name" class="text-2xl font-black text-gray-800">載入中...</h2>
+                    <p id="p-farm" class="text-green-600 font-bold"></p>
+                </div>
+                <div class="bg-green-50 p-3 rounded-2xl text-green-700">
+                    <i class="fas fa-leaf text-xl"></i>
+                </div>
+            </div>
+            
+            <div class="grid grid-cols-2 gap-4 text-sm mt-6">
+                <div class="bg-gray-50 p-3 rounded-xl">
+                    <span class="text-gray-400 block mb-1"><i class="fas fa-user text-xs mr-1"></i>負責人</span>
+                    <span id="p-owner" class="font-bold text-gray-800">--</span>
+                </div>
+                <div class="bg-gray-50 p-3 rounded-xl border-l-4 border-green-500">
+                    <span class="text-gray-400 block mb-1"><i class="fas fa-map-marker-alt text-xs mr-1"></i>生產地</span>
+                    <span id="p-location" class="font-bold text-gray-800">--</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <h3 class="font-black text-gray-800 mb-3"><i class="fas fa-info-circle mr-2 text-green-500"></i>農場故事</h3>
+            <p id="p-desc" class="text-gray-600 text-sm leading-relaxed">--</p>
+        </div>
+
+        <div class="bg-white rounded-3xl p-6 shadow-sm border border-gray-100">
+            <h3 class="font-black text-gray-800 mb-6"><i class="fas fa-history mr-2 text-green-500"></i>生產歷史軌跡 (鏈上存證)</h3>
+            <div id="timeline" class="space-y-8">
+                </div>
+        </div>
+        
+        <div class="text-center text-xs text-gray-400 py-6">
+            本資料經由 AgriTrace 區塊鏈技術加密存證<br>不可篡改且具有法律追溯效力
+        </div>
+    </div>
+
+    <script>
+        const SUPABASE_URL = "https://hfhmnyxhxqypdzoddnzu.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_O0cHsOP6Gf6kBkZlyeGf3A_I1NV7qA-";
+        const supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        async function initTrace() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const productId = urlParams.get('id');
+
+            if (!productId) {
+                document.getElementById('loading-spinner').style.display = 'none';
+                document.getElementById('loading-text').innerHTML = "<span class='text-rose-500'>❌ 無效的條碼：找不到產品 ID</span>";
+                return;
+            }
+
+            try {
+                const { data: product } = await supabaseClient.from('products0').select('*').eq('id', productId).single();
+                if (!product) throw new Error("找不到產品");
+                
+                const { data: profile } = await supabaseClient.from('farm_profiles').select('*').eq('farm_name', product.farm_name).single();
+                const { data: history } = await supabaseClient.from('product_records').select('*').eq('product_id', productId).order('status_date', { ascending: false });
+
+                document.getElementById('p-name').innerText = product.name;
+                document.getElementById('p-farm').innerText = product.farm_name;
+                document.getElementById('p-owner').innerText = profile ? profile.owner_name : "未提供";
+                
+                
+                document.getElementById('p-location').innerText = product.origin || "台灣優質農場";
+                document.getElementById('p-desc').innerText = profile && profile.description ? profile.description : "用心經營的在地農場。";
+
+                const timelineEl = document.getElementById('timeline');
+                if (history && history.length > 0) {
+                    timelineEl.innerHTML = history.map((h, index) => {
+                        
+                        const inputDateObj = h.input_time ? new Date(h.input_time) : new Date(h.created_at);
+                        const inputDateStr = inputDateObj.toLocaleString('zh-TW');
+                        
+                        return `
+                            <div class="relative pl-10 timeline-item">
+                                <div class="absolute left-0 top-1 w-10 h-10 flex items-center justify-center z-10">
+                                    <div class="${index === 0 ? 'bg-green-500 animate-pulse-slow' : 'bg-gray-300'} w-3 h-3 rounded-full ring-4 ${index === 0 ? 'ring-green-100' : 'ring-gray-100'}"></div>
+                                </div>
+                                <div class="bg-white">
+                                    <p class="text-base font-black text-gray-800 mb-1">${h.status_desc}</p>
+                                    
+                                    <div class="flex flex-col gap-1 mb-2">
+                                        <span class="text-xs font-bold text-gray-500">
+                                            <i class="far fa-calendar-alt w-4"></i>操作日期：${h.status_date}
+                                        </span>
+                                        <span class="text-[11px] font-bold text-blue-500">
+                                            <i class="fas fa-cloud-arrow-up w-4"></i>上鏈時間：${inputDateStr}
+                                        </span>
+                                    </div>
+                                    
+                                    ${h.note ? `<p class="text-xs text-gray-600 mt-2 bg-gray-50 p-2 rounded-lg border border-gray-100 leading-relaxed">${h.note}</p>` : ''}
+                                    
+                                    <p class="text-[10px] text-green-600 mt-3 font-bold">
+                                        <i class="fas fa-lock mr-1"></i> Blockchain Verified | 經手: ${h.handler || '農場人員'}
+                                    </p>
+                                </div>
+                            </div>
+                        `;
+                    }).join('');
+                } else {
+                    timelineEl.innerHTML = "<p class='text-gray-400 text-sm font-bold text-center py-4'>目前尚無歷史紀錄</p>";
+                }
+
+                document.getElementById('loading').style.display = 'none';
+            } catch (e) { 
+                console.error(e); 
+                document.getElementById('loading-spinner').style.display = 'none';
+                document.getElementById('loading-text').innerHTML = "<span class='text-rose-500'>❌ 系統發生錯誤</span>";
+            }
+        }
+        initTrace();
+    </script>
+</body>
+</html>

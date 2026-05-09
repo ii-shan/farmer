@@ -1,0 +1,890 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>綠農管家 - 區塊鏈智能合約旗艦專業版</title>
+   
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/5.7.2/ethers.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+   
+    <script src="https://unpkg.com/react@18.2.0/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone@7.22.20/babel.min.js"></script>
+    <!-- 引入 Font Awesome -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+   
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: { 'primary': '#2E7D32', 'dark': '#1A2F1A', 'bg-light': '#F4F7F6' }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', '微軟正黑體', sans-serif; background: #F4F7F6; margin: 0; overflow: hidden; }
+        .agri-input { width: 100%; padding: 12px 16px; border: 2px solid #e0e0e0; border-radius: 12px; outline: none; transition: 0.3s; background: #fff; }
+        .agri-input:focus { border-color: #2E7D32; box-shadow: 0 0 0 4px rgba(46, 125, 50, 0.1); }
+        .agri-input:read-only { background-color: #f8fafc; color: #64748b; cursor: not-allowed; }
+        .btn-primary { background: #2E7D32; color: white; padding: 12px 24px; border-radius: 12px; font-weight: bold; transition: 0.3s; cursor: pointer; border:none; }
+        .btn-primary:hover { background: #1B5E20; transform: translateY(-2px); box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .card-shadow { box-shadow: 0 4px 25px rgba(0,0,0,0.04); border: 1px solid #f0f0f0; border-radius: 24px; background: white; }
+        .animate-fade { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+       
+        .timeline-item::before { content: ''; position: absolute; left: -21px; top: 8px; width: 12px; height: 12px; background: #2E7D32; border-radius: 50%; border: 2px solid white; z-index: 10; }
+        .timeline-line { position: absolute; left: -16px; top: 20px; bottom: -20px; width: 2px; background: #e2e8f0; }
+        .stat-card { transition: all 0.3s ease; cursor: pointer; border: 2px solid transparent; }
+        .stat-card:hover { transform: translateY(-5px); border-color: #2E7D32; box-shadow: 0 10px 30px rgba(0,0,0,0.08); }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        const SUPABASE_URL = "https://hfhmnyxhxqypdzoddnzu.supabase.co";
+        const SUPABASE_KEY = "sb_publishable_O0cHsOP6Gf6kBkZlyeGf3A_I1NV7qA-";                    
+        const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+
+        const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+        const CONTRACT_ABI = [
+            "function createProduct(string _id, string _name) public",
+            "function addRecord(string _id, string _desc, string _date, string _handler) public",
+            "function lockProduct(string _id) public"
+        ];
+
+        const Icon = ({ name, className = "w-5 h-5" }) => {
+            const emojiMap = {
+                
+                'leaf': <i className="fas fa-leaf"></i>, 
+                'wallet': '👛', 'copy': '📋',
+                'layout-dashboard': '📊', 'plus-square': '➕', 'clipboard-edit': '📝',
+                'shopping-bag': '🛍️', 'truck': '🚚', 'message-circle': '💬',
+                'shield-check': '🛡️', 'activity': '📈', 'search': '🔍', 'image': '🖼️', 'trash': '🗑️', 'lock': '🔒',
+                'check-double': '✅', 'location-dot': '📍'
+            };
+            return <span className={className}>{emojiMap[name] || '💠'}</span>;
+        };
+
+        const FormField = ({ label, value, onChange, readOnly, placeholder, type="text" }) => (
+            <div className="flex flex-col gap-2 text-left w-full text-dark">
+                <label className="text-sm font-bold text-gray-500 uppercase tracking-wide">{label}</label>
+                <input type={type} className="agri-input" value={value || ''} readOnly={readOnly} placeholder={placeholder} onChange={e=>onChange && onChange(e.target.value)} />
+            </div>
+        );
+
+        function LoginView({ onLogin }) {
+            const [mode, setMode] = useState('login');
+            const [email, setEmail] = useState('');
+            const [password, setPassword] = useState('');
+            const [rememberMe, setRememberMe] = useState(false);
+
+            useEffect(() => {
+                const savedEmail = localStorage.getItem('agri_remember_email');
+                if (savedEmail) { setEmail(savedEmail); setRememberMe(true); }
+            }, []);
+
+            const handleLoginClick = async () => {
+                if(!email || !password) return alert("⚠️ 請完整輸入 Email 與密碼！");
+                const { data, error } = await supabase.from('farm_profiles').select('*').eq('email', email).single();
+                if (error) return alert(`⚠️ 找不到此帳號或連線失敗。`);
+                if (data.password !== password) return alert("⚠️ 密碼錯誤！");
+                if (rememberMe) localStorage.setItem('agri_remember_email', email);
+                else localStorage.removeItem('agri_remember_email');
+                onLogin(data);
+            };
+
+            const handleRegisterClick = async () => {
+                if(!email || !password) return alert("⚠️ 請設定帳密來建立帳號。");
+                const wallet = "0x" + Array.from({length: 40}, () => Math.floor(Math.random()*16).toString(16)).join('');
+                const { error } = await supabase.from('farm_profiles').insert([{ email, password, wallet, farm_name: '新農場', owner_name: '管理者' }]);
+                if (error) alert("註冊失敗"); else { alert("✅ 註冊成功，請登入。"); setMode('login'); }
+            };
+
+            return (
+                <div className="flex h-screen bg-bg-light text-left text-dark">
+                    <div className="hidden lg:flex w-1/2 bg-primary items-center justify-center relative overflow-hidden text-white text-center p-12 text-left">
+                        <div>
+                            {/* 🌟 修改這裡：登入標題圖示 */}
+                            <h1 className="text-5xl font-black mb-6 tracking-wider text-white">
+                                <i className="fas fa-leaf mr-4"></i>綠農管家
+                            </h1>
+                            <p className="text-xl opacity-90 text-white font-bold">Web3 區塊鏈農耕溯源系統</p>
+                        </div>
+                    </div>
+                    <div className="w-full lg:w-1/2 flex items-center justify-center p-8 bg-white text-left">
+                        <div className="w-full max-w-md">
+                            <h2 className="text-3xl font-black mb-2">歡迎登入</h2>
+                            <p className="text-gray-500 mb-8">專題演示版：區塊鏈上鏈與溯源管理</p>
+                            <input type="email" placeholder="Email" className="agri-input mb-5" value={email} onChange={e=>setEmail(e.target.value)} />
+                            <input type="password" placeholder="密碼" className="agri-input mb-6" value={password} onChange={e=>setPassword(e.target.value)} />
+                            {mode === 'login' && (
+                                <div className="flex items-center justify-between mb-8 px-1">
+                                    <label className="flex items-center gap-2 cursor-pointer group text-dark">
+                                        <input type="checkbox" className="w-4 h-4 accent-primary" checked={rememberMe} onChange={(e) => setRememberMe(e.target.checked)} />
+                                        <span className="text-sm">記住我</span>
+                                    </label>
+                                    <a href="#" onClick={async (e) => { e.preventDefault(); if (!email) return alert("請先輸入電子郵件。"); const { data, error } = await supabase.from('farm_profiles').select('*').eq('email', email).single(); if (error || !data) return alert("找不到此帳號"); const newPassword = prompt(`請輸入新密碼：`); if (newPassword) { await supabase.from('farm_profiles').update({ password: newPassword }).eq('email', email); alert("密碼重設成功"); setPassword(''); } }} className="text-sm text-primary font-bold hover:underline">忘記密碼？</a>
+                                </div>
+                            )}
+                            <button onClick={mode === 'login' ? handleLoginClick : handleRegisterClick} className="btn-primary w-full text-lg py-4 mb-6 shadow-lg shadow-green-900/20">{mode === 'login' ? '登入系統' : '確認註冊'}</button>
+                            <div className="text-center text-sm text-gray-600">{mode === 'login' ? "還沒有帳號嗎？" : "已有帳號？"} <a href="#" onClick={(e) => { e.preventDefault(); setMode(mode==='login'?'reg':'login'); }} className="text-primary font-bold hover:underline ml-1">{mode === 'login' ? '立即註冊' : '返回登入'}</a></div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        function App() {
+            const [user, setUser] = useState(null);
+            const [activeTab, setActiveTab] = useState('dash');
+            const [profile, setProfile] = useState({});
+            const [products, setProducts] = useState([]);
+            const [activities, setActivities] = useState([]);
+            const [orders, setOrders] = useState([]);
+            const [isLoading, setIsLoading] = useState(false);
+            const [qrModalData, setQrModalData] = useState(null);
+
+            const loadData = async (email) => {
+                setIsLoading(true);
+                try {
+                    const { data: prof } = await supabase.from('farm_profiles').select('*').eq('email', email).single();
+                    if(prof) {
+                        setProfile(prof);
+                        const { data: ords } = await supabase.from('orders').select('*').eq('farm_name', prof.farm_name);
+                        if(ords) setOrders(ords);
+                    }
+                    const { data: prods } = await supabase.from('products0').select('*').eq('email', email).order('created_at', { ascending: false });
+                    const { data: recs } = await supabase.from('product_records').select('*').order('status_date', { ascending: false });
+                    if(prods) setProducts(prods.map(p => ({ ...p, history: recs ? recs.filter(r => r.product_id === p.id) : [] })));
+                    const { data: acts } = await supabase.from('activities').select('*').eq('email', email).order('id', { ascending: false }).limit(5);
+                    setActivities(acts || []);
+                } catch (e) { console.error(e); }
+                setIsLoading(false);
+            };
+
+            const addActivity = async (msg) => {
+                const now = new Date();
+                const timeStr = now.toLocaleString();
+                const newAct = { email: user.email, time: timeStr, msg };
+                await supabase.from('activities').insert([newAct]);
+                setActivities(prev => [{...newAct}, ...prev].slice(0, 5));
+            };
+
+            useEffect(() => { if(user) loadData(user.email); }, [user]);
+
+            const copyWallet = () => {
+                navigator.clipboard.writeText(profile.wallet || '');
+                alert("虛擬節點地址已複製！");
+            };
+
+            if (!user) return <LoginView onLogin={setUser} />;
+            if (isLoading) return <div className="h-screen flex items-center justify-center font-bold text-primary text-xl">🔄 正在載入雲端數據...</div>;
+
+            return (
+                <div className="flex h-screen overflow-hidden text-left text-dark">
+                    <aside className="w-64 bg-dark text-white flex flex-col shrink-0 z-50">
+                        
+                        <div className="p-8 font-black text-2xl tracking-tighter border-b border-white/5 flex items-center gap-3">
+                            <i className="fas fa-leaf "></i> 荷葉
+                        </div>
+                        <nav className="flex-1 mt-6">
+                            <SidebarItem active={activeTab==='dash'} onClick={()=>setActiveTab('dash')} icon="layout-dashboard" label="農場概況" />
+                            <SidebarItem active={activeTab==='product'} onClick={()=>setActiveTab('product')} icon="plus-square" label="農產品履歷建檔" />
+                            <SidebarItem active={activeTab==='record'} onClick={()=>setActiveTab('record')} icon="clipboard-edit" label="生產紀錄維護" />
+                            <SidebarItem active={activeTab==='publish'} onClick={()=>setActiveTab('publish')} icon="shopping-bag" label="產品管理與上架" />
+                            <div className="h-px bg-white/5 my-4 mx-6"></div>
+                            <SidebarItem active={activeTab==='orders'} onClick={()=>setActiveTab('orders')} icon="truck" label="訂單與物流管理" />
+                            <SidebarItem active={activeTab==='chat'} onClick={()=>setActiveTab('chat')} icon="message-circle" label="客服與評價" />
+                        </nav>
+                        <div className="p-4 border-t border-white/5">
+                            <SidebarItem active={activeTab==='profile'} onClick={()=>setActiveTab('profile')} icon="shield-check" label="帳戶資料設定" />
+                            <button onClick={()=>setUser(null)} className="w-full text-left px-8 py-4 text-gray-500 hover:text-rose-400 font-bold transition">登出</button>
+                        </div>
+                    </aside>
+                    <main className="flex-1 flex flex-col bg-[#F8FAF9] overflow-hidden text-left">
+                        <header className="h-20 bg-white border-b px-10 flex items-center justify-between shadow-sm z-40">
+                            <div className="flex flex-col text-left">
+                                <span className="font-black text-dark text-xl leading-tight">{profile.farm_name}</span>
+                                <span className="text-[10px] text-gray-400 font-bold uppercase flex items-center gap-1 text-left">
+                                    <Icon name="shield-check" className="w-3 h-3 text-primary"/> Blockchain Traceability Active
+                                </span>
+                            </div>
+                            <div onClick={copyWallet} className="bg-rose-50 text-rose-600 px-4 py-2 rounded-full text-xs font-black border border-rose-100 flex items-center gap-2 cursor-pointer hover:bg-rose-100 transition-all">
+                                👛 {profile.wallet?.substring(0,12)}...
+                            </div>
+                        </header>
+                        <div className="flex-1 overflow-y-auto p-12 no-scrollbar text-left text-dark">
+                            {activeTab === 'dash' && <DashboardView activities={activities} products={products} orders={orders} setActiveTab={setActiveTab} />}
+                            {activeTab === 'product' && <ProductView profile={profile} email={user.email} onSaved={()=>loadData(user.email)} addActivity={addActivity} />}
+                            {activeTab === 'record' && <RecordView products={products} profile={profile} onSaved={()=>loadData(user.email)} addActivity={addActivity} />}
+                            {activeTab === 'publish' && <PublishView products={products} profile={profile} onSaved={()=>loadData(user.email)} addActivity={addActivity} qrModalData={qrModalData} setQrModalData={setQrModalData} />}
+                            {activeTab === 'orders' && <OrdersView profile={profile} onSaved={()=>loadData(user.email)} />}
+                            {activeTab === 'chat' && <ChatView profile={profile} />}
+                            {activeTab === 'profile' && <ProfileEditView profile={profile} email={user.email} onSaved={()=>loadData(user.email)} addActivity={addActivity} />}
+                        </div>
+                    </main>
+                </div>
+            );
+        }
+
+        const SidebarItem = ({ icon, label, active, onClick }) => (
+            <div onClick={onClick} className={`px-8 py-5 cursor-pointer flex items-center gap-4 transition-all border-l-4 ${active ? 'bg-primary border-white text-white font-black' : 'text-gray-400 border-transparent hover:bg-white/5'}`}>
+                <Icon name={icon} className="w-6 h-6" /> <span className="text-sm">{label}</span>
+            </div>
+        );
+
+        function DashboardView({ activities, products, orders = [], setActiveTab }) {
+            const publishedCount = products.filter(p => p.published && !p.is_delisted).length;
+            const pendingOrderCount = orders.filter(o => o.status === '已下單' || o.status === '待處理' || o.status === '退貨申請中' || o.status === '已送達農夫').length;
+           
+            return (
+                <div className="max-w-6xl mx-auto space-y-10 animate-fade text-left text-dark">
+                    <div className="grid grid-cols-4 gap-6 text-left">
+                        <div onClick={()=>setActiveTab('record')} className="stat-card bg-white p-6 rounded-[35px] shadow-sm border flex flex-col gap-4 text-left"><div className="text-3xl bg-green-50 w-14 h-14 flex items-center justify-center rounded-2xl">🌱</div><div><p className="text-gray-400 text-xs font-bold mb-1 uppercase text-left text-dark font-bold">總建檔履歷</p><p className="text-3xl font-black text-left">{products.length}</p></div></div>
+                        <div onClick={()=>setActiveTab('publish')} className="stat-card bg-white p-6 rounded-[35px] shadow-sm border flex flex-col gap-4 text-left"><div className="text-3xl bg-blue-50 w-14 h-14 flex items-center justify-center rounded-2xl">🗳️</div><div><p className="text-gray-400 text-xs font-bold mb-1 uppercase text-left text-dark font-bold">已上架商品</p><p className="text-3xl font-black text-left">{publishedCount}</p></div></div>
+                        <div onClick={()=>setActiveTab('orders')} className="stat-card bg-white p-6 rounded-[35px] shadow-sm border flex flex-col gap-4 text-left"><div className="text-3xl bg-amber-50 w-14 h-14 flex items-center justify-center rounded-2xl">🕒</div><div><p className="text-gray-400 text-xs font-bold mb-1 uppercase text-left text-dark font-bold">需處理訂單</p><p className="text-3xl font-black text-left text-rose-500">{pendingOrderCount}</p></div></div>
+                        <div onClick={()=>setActiveTab('chat')} className="stat-card bg-white p-6 rounded-[35px] shadow-sm border flex flex-col gap-4 text-left"><div className="text-3xl bg-purple-50 w-14 h-14 flex items-center justify-center rounded-2xl">💬</div><div><p className="text-gray-400 text-xs font-bold mb-1 uppercase text-left text-dark font-bold">線上客服系統</p><p className="text-lg font-black text-left text-primary mt-2">正式啟用</p></div></div>
+                    </div>
+                    <div className="bg-white p-10 rounded-[45px] shadow-sm border border-gray-100 text-left text-dark">
+                        <h3 className="text-xl font-black mb-8 border-b pb-4 flex items-center gap-3 text-left">最近動態</h3>
+                        <div className="space-y-6 text-left">
+                            {activities.map((a, i) => (
+                                <div key={i} className="flex gap-6 border-b border-gray-50 pb-6 last:border-0 last:pb-0 text-left">
+                                    <span className="text-[10px] bg-gray-50 px-2 py-1 rounded text-gray-400 font-bold">{i + 1}</span>
+                                    <span className="text-xs font-mono text-gray-400 w-48">{a.time}</span>
+                                    <span className="font-bold text-sm text-left">{a.msg}</span>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        
+        function ProductView({ profile, email, onSaved, addActivity }) {
+            const [form, setForm] = useState({ name: '', category: '水果', origin: '', storage_method: '', eating_method: '', nutritional_value: '', handling_farmer: profile.owner_name || '' });
+            const [loading, setLoading] = useState(false);
+            const autoId = useMemo(() => "PRD" + Date.now().toString().slice(-6), []);
+
+            const handleSaveWithBlockchain = async () => {
+                if(!window.ethereum) return alert("區塊鏈功能需安裝 MetaMask！");
+                setLoading(true);
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    const signer = provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                    const tx = await contract.createProduct(autoId, form.name, { gasLimit: 500000 });
+                    await tx.wait();
+
+                    const { error } = await supabase.from('products0').insert([{ id: autoId, email, farm_name: profile.farm_name, status: '建檔完成', ...form }]);
+                    if (!error) {
+                        await addActivity(`建立新產品並上鏈存證：[${autoId}] ${form.name}`);
+                        alert("✅ 產品建檔成功，區塊鏈存證完成！");
+                        onSaved();
+                    }
+                } catch (e) {
+                    console.error("❌ 區塊鏈上鏈錯誤詳細資訊：", e);
+                    alert("交易失敗，請確認網路環境或查看 Console 了解詳細錯誤。");
+                }
+                setLoading(false);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto bg-white p-12 rounded-[50px] shadow-sm border border-gray-100 space-y-10 animate-fade text-dark text-left">
+                    <h2 className="text-2xl font-black text-primary flex items-center gap-3 text-left">農產品履歷建檔 (Smart Contract)</h2>
+                    <div className="grid grid-cols-2 gap-10 text-left">
+                        <FormField label="系統配發 ID" value={autoId} readOnly />
+                        <FormField label="建檔農夫" value={form.handling_farmer} onChange={v=>setForm({...form, handling_farmer:v})} />
+                        <FormField label="農產品名稱 *" placeholder="例如：金鑽鳳梨" value={form.name} onChange={v=>setForm({...form, name:v})} />
+                       
+                        <div className="flex flex-col gap-2 text-left w-full text-dark">
+                            <label className="text-sm font-bold text-gray-500 uppercase tracking-wide">商品分類 *</label>
+                            <select className="agri-input font-bold" value={form.category} onChange={e=>setForm({...form, category:e.target.value})}>
+                                <option value="水果">🍎 水果</option>
+                                <option value="蔬菜">🥬 蔬菜</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-10 text-left text-dark">
+                        <FormField label="產地 *" placeholder="例如：台南市關廟區" value={form.origin} onChange={v=>setForm({...form, origin:v})} />
+                        <FormField label="保存方式" placeholder="如：冷藏保存 7 天" value={form.storage_method} onChange={v=>setForm({...form, storage_method:v})} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-10 text-left text-dark">
+                        <FormField label="建議吃法" placeholder="如：削皮後直接食用" value={form.eating_method} onChange={v=>setForm({...form, eating_method:v})} />
+                        <FormField label="🍎 營養價值參考" value={form.nutritional_value} onChange={v=>setForm({...form, nutritional_value:v})} />
+                    </div>
+                    <button onClick={handleSaveWithBlockchain} disabled={loading} className="btn-primary w-full py-5 text-xl mt-6 shadow-2xl">
+                        {loading ? "⛓️ 正在廣播交易..." : "確認建檔並同步雲端與區塊鏈"}
+                    </button>
+                </div>
+            );
+        }
+
+        function RecordView({ products, profile, onSaved, addActivity }) {
+            const [selected, setSelected] = useState(null);
+            const [search, setSearch] = useState('');
+            const [loading, setLoading] = useState(false);
+            const [record, setRecord] = useState({ process: '育苗期', note: '', status_date: new Date().toISOString().split('T')[0], handler: profile.owner_name || '' });
+            const filtered = products.filter(p => p.name.includes(search) || p.id.includes(search));
+
+            const handleUpdateBlockchain = async () => {
+                const pick = new Date(record.status_date);
+                const limit = new Date(); limit.setDate(limit.getDate() - 21);
+                if (pick < limit) return alert("⚠️ 作業日期僅限補登 3 週內的紀錄！");
+                if(!window.ethereum) return alert("需安裝 MetaMask！");
+
+                setLoading(true);
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    await provider.send("eth_requestAccounts", []);
+                    const signer = provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                    const tx = await contract.addRecord(selected.id, record.process, record.status_date, record.handler, { gasLimit: 500000 });
+                    await tx.wait();
+
+                    await supabase.from('product_records').insert([{ product_id: selected.id, handler: record.handler, status_desc: record.process, note: record.note, status_date: record.status_date, input_time: new Date().toISOString() }]);
+                    await supabase.from('products0').update({ status: record.process }).eq('id', selected.id);
+                   
+                    await addActivity(`上鏈紀錄：[${selected.id}] ${selected.name} ➔ ${record.process}`);
+                    alert("✅ 區塊鏈紀錄已保存！");
+                    setSelected(null);
+                    onSaved();
+                } catch (e) { alert("交易失敗：請確認網路為 GoChain 且帳戶內有餘額。"); }
+                setLoading(false);
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto space-y-10 animate-fade text-left text-dark">
+                    <div className="flex justify-between items-end text-left"><h2 className="text-3xl font-black text-dark">📝 生產紀錄維護</h2><div className="relative w-96"><Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" /><input placeholder="查詢產品..." className="agri-input pl-12 shadow-sm" onChange={e=>setSearch(e.target.value)} /></div></div>
+                    <div className="bg-white rounded-[40px] shadow-sm border overflow-hidden">
+                        <table className="w-full text-left">
+                            <thead className="bg-gray-50 text-gray-400 text-xs font-black uppercase text-left"><tr><th className="px-10 py-6">建檔日期</th><th className="px-8 py-6">ID</th><th className="px-8 py-6">名稱</th><th className="px-8 py-6 text-center">進度</th><th className="px-10 py-6 text-right">管理</th></tr></thead>
+                            <tbody className="divide-y">{filtered.map(p => (<tr key={p.id} className={`hover:bg-gray-50/50 transition-all ${p.published ? 'bg-gray-50/50 opacity-60' : ''} ${p.is_delisted ? 'opacity-40 grayscale' : ''}`}><td className="px-10 py-7 text-xs font-mono text-gray-400">{p.created_at?.split('T')[0]}</td><td className="px-8 py-7 font-mono text-sm text-primary font-bold">{p.id}</td><td className="px-8 py-7 font-black text-dark">{p.name} {p.published && !p.is_delisted && <Icon name="lock" className="inline w-3 h-3 ml-2 text-gray-400" />} {p.is_delisted && <span className="text-[10px] bg-gray-200 text-gray-500 px-2 py-1 rounded ml-2">已下架</span>}</td><td className="px-8 py-7 text-center"><span className="bg-green-50 text-green-600 px-4 py-1.5 rounded-full text-[10px] font-black uppercase tracking-wider">{p.status}</span></td><td className="px-10 py-7 text-right">{p.is_delisted ? <span className="text-xs text-gray-400 font-bold px-4 py-2 border border-dashed rounded-xl">🚫 產品已下架</span> : p.published ? <span className="text-xs text-gray-400 font-bold px-4 py-2 border border-dashed rounded-xl">🔒 履歷已上鏈鎖定</span> : <button onClick={()=>{setSelected(p); setRecord({...record, handler: profile.owner_name});}} className="bg-dark text-white px-8 py-3 rounded-2xl text-xs font-black shadow-lg">更新狀態</button>}</td></tr>))}</tbody>
+                        </table>
+                    </div>
+                    {selected && (
+                        <div className="fixed inset-0 bg-black/50 z-[100] flex items-center justify-center p-6 backdrop-blur-sm text-left">
+                            <div className="bg-white p-12 rounded-[50px] w-full max-w-5xl shadow-2xl animate-fade overflow-hidden flex flex-col max-h-[85vh] text-left">
+                                <h3 className="text-2xl font-black mb-4 text-left font-black">管理產品：{selected.name}</h3>
+                                <div className="flex-1 overflow-y-auto no-scrollbar grid grid-cols-2 gap-12 text-left">
+                                    <div className="space-y-6 text-left">
+                                        <p className="text-xs text-rose-500 font-bold text-left">＊上鏈後作業日期與流程將永久留存不可刪改</p>
+                                        <FormField type="date" label="作業日期 (Status Date)" value={record.status_date} onChange={v=>setRecord({...record, status_date:v})} />
+                                        <FormField label="作業經手人" value={record.handler} onChange={v=>setRecord({...record, handler:v})} />
+                                        <div className="flex flex-col gap-2 text-left text-dark"><label className="text-sm font-bold text-gray-400 uppercase font-black">TGAP 作業流程</label><select className="agri-input font-black text-primary" value={record.process} onChange={e=>setRecord({...record, process:e.target.value})}><option value="育苗期">🌱 育苗期</option><option value="整地與施肥">🚜 整地與施肥</option><option value="定植或播種">🌾 定植或播種</option><option value="栽培管理">💧 栽培管理</option><option value="病蟲害防治">🛡️ 病蟲害防治</option><option value="採收完成">✂️ 採收完成</option></select></div>
+                                        <FormField label="詳細備註內容" placeholder="輸入細節..." value={record.note} onChange={v=>setRecord({...record, note:v})} />
+                                        <div className="flex gap-4 pt-6 border-t font-black"><button onClick={handleUpdateBlockchain} disabled={loading} className="btn-primary flex-1 py-5 shadow-xl font-black">{loading ? "正在廣播交易..." : "確認寫入上鏈"}</button><button onClick={()=>setSelected(null)} className="flex-1 bg-gray-100 rounded-2xl font-black text-gray-400 transition hover:bg-gray-200">取消</button></div>
+                                    </div>
+                                    <div className="bg-gray-50/50 rounded-3xl p-8 border border-gray-100 overflow-y-auto text-left text-dark text-left">
+                                        <h4 className="font-black text-gray-400 uppercase text-sm tracking-widest mb-8 text-left">📜 歷史軌跡 (鏈上存證)</h4>
+                                        <div className="space-y-10 pl-6 relative">
+                                            {selected.history?.map((h, i) => (
+                                                <div key={i} className="relative timeline-item text-xs text-left">
+                                                    {i !== selected.history.length - 1 && <div className="timeline-line text-left"></div>}
+                                                    <div className="flex justify-between items-start text-left"><p className="font-black text-dark text-sm">{h.status_desc}</p><span className="text-[10px] bg-white px-3 py-1 rounded-full border text-gray-400 font-mono">{h.status_date}</span></div>
+                                                    <p className="text-[9px] text-gray-400 mt-1 italic font-bold text-left">上鏈時間: {new Date(h.input_time).toLocaleString()}</p>
+                                                    <div className="flex items-center gap-2 mt-2 text-left"><span className="text-[10px] bg-green-50 text-green-600 px-2 py-0.5 rounded font-black">經手: {h.handler}</span></div>
+                                                    {h.note && <p className="mt-3 text-[11px] bg-white p-3 rounded-xl border border-gray-100 italic text-gray-500 text-left leading-relaxed">{h.note}</p>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function PublishView({ products, profile, onSaved, addActivity, qrModalData, setQrModalData }) {
+            const [editItem, setEditItem] = useState(null);
+            const [search, setSearch] = useState('');
+            const [filterStatus, setFilterStatus] = useState('all');
+            const [loading, setLoading] = useState(false);
+
+            let filtered = products.filter(p => p.name.includes(search) || p.id.includes(search) || (p.weight && p.weight.includes(search)));
+           
+            if (filterStatus === 'pending') {
+                filtered = filtered.filter(p => p.status !== '採收完成' && !p.published && !p.is_delisted);
+            } else if (filterStatus === 'published') {
+                filtered = filtered.filter(p => p.published && !p.is_delisted);
+            } else if (filterStatus === 'delisted') {
+                filtered = filtered.filter(p => p.is_delisted);
+            }
+
+            filtered.sort((a, b) => {
+                if (a.is_delisted && !b.is_delisted) return 1;
+                if (!a.is_delisted && b.is_delisted) return -1;
+                return 0;
+            });
+
+            const handleFileChange = (e) => {
+                const file = e.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onloadend = () => setEditItem({ ...editItem, image_url: reader.result });
+                    reader.readAsDataURL(file);
+                }
+            };
+
+            const handleBlockchainLock = async () => {
+                if(!window.ethereum) return alert("需連接 MetaMask！");
+                setLoading(true);
+                try {
+                    const provider = new ethers.providers.Web3Provider(window.ethereum);
+                    const signer = provider.getSigner();
+                    const contract = new ethers.Contract(CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+                    const tx = await contract.lockProduct(editItem.id, { gasLimit: 500000 });
+                    await tx.wait();
+
+                    await supabase.from('products0').update({ published: true, price: editItem.price, stock_qty: editItem.stock_qty, weight: editItem.weight, is_hot: editItem.is_hot, description: editItem.description, image_url: editItem.image_url }).eq('id', editItem.id);
+                   
+                    await addActivity(`上架鎖定履歷：[${editItem.id}] ${editItem.name}`);
+                    alert("✅ 履歷已永久鎖定並發布至區塊鏈！");
+                    setEditItem(null);
+                    onSaved();
+                } catch (e) { alert("交易失敗。"); }
+                setLoading(false);
+            };
+
+            const handleDelist = async (item) => {
+                if (!confirm(`確定要將「${item.name}」下架嗎？\n下架後商品將被反灰並移至最底端。`)) return;
+                setLoading(true);
+                try {
+                    const { error } = await supabase.from('products0').update({ is_delisted: true, is_hot: false }).eq('id', item.id);
+                    if (error) throw error;
+                    await addActivity(`產品下架：[${item.id}] ${item.name}`);
+                    alert("✅ 產品已成功下架！");
+                    onSaved();
+                } catch (e) {
+                    alert("下架失敗：" + e.message);
+                }
+                setLoading(false);
+            };
+
+           
+            const showQR = (p) => {
+          
+                const traceUrl = `${window.location.origin}/trace.html?id=${p.id}`;
+               
+   
+                const sortedHistory = [...p.history].sort((a, b) => new Date(b.status_date) - new Date(a.status_date));
+                const historyText = sortedHistory.map(h => `• ${h.status_date}: ${h.status_desc}`).join('\n');
+                const displayInfo = `【產品：${p.name}】\n\n完整歷史紀錄：\n${historyText}`;
+               
+                setQrModalData(displayInfo);
+               
+                setTimeout(() => {
+                    const canvasEl = document.getElementById('qr-canvas');
+                    if(canvasEl) {
+                        canvasEl.innerHTML = "";
+                        try {
+                            new QRCode(canvasEl, {
+                                text: traceUrl,  
+                                width: 220,
+                                height: 220,
+                                colorDark : "#2E7D32",
+                                correctLevel : QRCode.CorrectLevel.M
+                            });
+                            console.log("QR Code 成功生成的網址為:", traceUrl);
+                        } catch(err) {
+                            console.error("產生 QR 碼失敗:", err);
+                        }
+                    }
+                }, 250);
+            };
+
+            return (
+                <div className="max-w-5xl mx-auto space-y-10 animate-fade text-left text-dark">
+                    <div className="flex justify-between items-end text-left">
+                        <h2 className="text-3xl font-black text-dark">🛒 產品管理與上架 (合約存證)</h2>
+                        <div className="flex items-center gap-4">
+                            <select className="agri-input shadow-sm py-2 font-bold text-gray-500" value={filterStatus} onChange={e=>setFilterStatus(e.target.value)}>
+                                <option value="all">全部狀態排序</option>
+                                <option value="pending">篩選：需先完成採收</option>
+                                <option value="published">篩選：已上架</option>
+                                <option value="delisted">篩選：已下架</option>
+                            </select>
+                            <div className="relative w-72">
+                                <Icon name="search" className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300" />
+                                <input placeholder="搜尋..." className="agri-input pl-12 shadow-sm" onChange={e=>setSearch(e.target.value)} />
+                            </div>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6 text-left">
+                        {filtered.map(p => {
+                            const canPublish = p.status === '採收完成';
+                            return (
+                                <div key={p.id} className={`bg-white p-8 rounded-[40px] shadow-sm border border-gray-100 flex justify-between items-center group text-left ${p.is_delisted ? 'opacity-50 grayscale bg-gray-50' : ''}`}>
+                                    <div className="flex items-center gap-10 text-left">
+                                        <div className="bg-bg-light w-24 h-24 rounded-[30px] flex items-center justify-center overflow-hidden border">
+                                            {p.image_url ? <img src={p.image_url} className="w-full h-full object-cover" /> : <span className="text-5xl">{p.is_hot && !p.is_delisted ? '🔥' : '📦'}</span>}
+                                        </div>
+                                        <div className="text-left">
+                                            <h3 className="text-2xl font-black text-dark text-left font-black">{p.name} <span className="text-[10px] font-mono text-gray-300 ml-2">#{p.id}</span></h3>
+                                            <p className="text-sm font-bold text-gray-400 uppercase tracking-tighter text-left">分類：{p.category || '未分類'} | 規格：{p.weight || '--'} | 售價：${p.price || '--'}</p>
+                                        </div>
+                                    </div>
+                                    <div className="flex gap-4">
+                                        {p.is_delisted ? (
+                                            <span className="text-xs text-gray-400 font-bold p-3 bg-gray-200 rounded-xl">🚫 已下架</span>
+                                        ) : (
+                                            <>
+                                                {/* 點擊按鈕即可呼叫 showQR 並動態生成專屬證書 */}
+                                                {p.published && <button onClick={()=>showQR(p)} className="bg-white border-2 border-primary text-primary px-6 py-4 rounded-2xl text-xs font-black shadow-sm">顯示履歷碼</button>}
+                                                {!canPublish && !p.published ? (
+                                                    <span className="text-xs text-rose-400 font-bold p-3 bg-rose-50 rounded-xl">需先完成採收</span>
+                                                ) : (
+                                                    <button onClick={()=>setEditItem({...p})} className="bg-dark text-white px-10 py-5 rounded-[22px] text-sm font-black shadow-xl hover:bg-primary">{p.published ? '修改資料' : '編輯並上架'}</button>
+                                                )}
+                                                {p.published && (
+                                                    <button onClick={()=>handleDelist(p)} disabled={loading} className="bg-gray-100 text-gray-400 px-6 py-4 rounded-2xl text-xs font-black shadow-sm hover:bg-rose-500 hover:text-white transition-all">下架</button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {editItem && (
+                        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[100] flex items-center justify-center p-6 text-left text-dark">
+                            <div className="bg-white p-12 rounded-[50px] w-full max-w-4xl shadow-2xl animate-fade overflow-y-auto max-h-[90vh] text-left">
+                                <h3 className="text-2xl font-black mb-10 border-b pb-6 text-left text-dark font-black">編輯產品：{editItem.name}</h3>
+                                <div className="grid grid-cols-2 gap-12 text-left">
+                                    <div className="space-y-6 text-left">
+                                        <FormField label="零售售價" type="number" value={editItem.price} onChange={v=>setEditItem({...editItem, price:v})} />
+                                        <FormField label="包裝規格" placeholder="範例：5臺斤/箱" value={editItem.weight} onChange={v=>setEditItem({...editItem, weight:v})} />
+                                        <FormField label="目前庫存" type="number" value={editItem.stock_qty} onChange={v=>setEditItem({...editItem, stock_qty:v})} />
+                                        <label className="flex items-center gap-4 cursor-pointer font-black text-orange-600"><input type="checkbox" className="w-7 h-7 accent-orange-500" checked={editItem.is_hot} onChange={e=>setEditItem({...editItem, is_hot:e.target.checked})} /> 熱賣推薦品 🔥</label>
+                                    </div>
+                                    <div className="space-y-6 text-left text-dark text-left">
+                                        <label className="text-sm font-bold text-gray-500 font-black">🖼️ 商品照片</label>
+                                        <input type="file" className="text-sm" accept="image/*" onChange={handleFileChange} />
+                                        {editItem.image_url && <img src={editItem.image_url} className="w-full h-32 object-contain rounded-2xl border" />}
+                                        <div className="flex flex-col gap-2 text-left">
+                                            <label className="text-sm font-bold text-gray-400 uppercase font-black text-left">商品特色詳細說明</label>
+                                            <textarea rows="4" className="agri-input resize-none" value={editItem.description} onChange={e=>setEditItem({...editItem, description:e.target.value})}></textarea>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-6 mt-10 text-left"><button onClick={handleBlockchainLock} disabled={loading} className="btn-primary flex-1 py-5 text-xl font-black shadow-xl">{loading ? "正在發布交易..." : "同步更新並鎖定履歷 (上鏈)"}</button><button onClick={()=>setEditItem(null)} className="flex-1 bg-gray-100 rounded-[25px] font-black text-gray-400 hover:bg-gray-100 transition text-center py-5">取消</button></div>
+                            </div>
+                        </div>
+                    )}
+                    {qrModalData && (
+                        <div className="fixed inset-0 bg-black/80 z-[200] flex items-center justify-center p-6 backdrop-blur-md text-left">
+                            <div className="bg-white p-12 rounded-[50px] max-w-md w-full text-center flex flex-col max-h-[90vh]">
+                                <h3 className="text-2xl font-black text-primary mb-4 shrink-0 text-center font-black">區塊鏈溯源證書</h3>
+                                <div className="overflow-y-auto no-scrollbar flex-1 space-y-8 text-left">
+                                    <div id="qr-canvas" className="flex justify-center p-4 border-2 border-dashed border-gray-100 rounded-3xl bg-white mx-auto w-[252px]"></div>
+                                    <div className="text-left text-xs bg-gray-50 p-8 rounded-[30px] whitespace-pre-wrap border border-gray-100 text-gray-600 leading-relaxed font-bold">
+                                        {qrModalData}
+                                    </div>
+                                </div>
+                                <button onClick={()=>setQrModalData(null)} className="btn-primary w-full py-5 rounded-[25px] mt-8 shrink-0 text-lg shadow-xl text-center font-black">關閉視窗</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function OrdersView({ profile, onSaved }) {
+            const [orders, setOrders] = useState([]);
+            const [filter, setFilter] = useState('all');
+            const [loading, setLoading] = useState(false);
+            const [isRefreshing, setIsRefreshing] = useState(false);
+           
+            const [viewingLogistics, setViewingLogistics] = useState(null);
+            const [logisticsRecords, setLogisticsRecords] = useState([]);
+            const [isLoadingLogistics, setIsLoadingLogistics] = useState(false);
+
+            const loadOrders = async () => {
+                setLoading(true);
+                const { data } = await supabase.from('orders').select('*').eq('farm_name', profile.farm_name).order('created_at', { ascending: false });
+                setOrders(data || []);
+                setLoading(false);
+            };
+
+            const handleRefresh = async () => {
+                setIsRefreshing(true);
+                await loadOrders();
+                setTimeout(() => setIsRefreshing(false), 500);
+            };
+
+            useEffect(() => {
+                if (profile?.farm_name) loadOrders();
+               
+                const channel = supabase.channel('farm_orders_realtime')
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+                        loadOrders();
+                        if(onSaved) onSaved();
+                    })
+                    .subscribe();
+
+                return () => supabase.removeChannel(channel);
+            }, [profile]);
+
+            const notifyLogistics = async (id, newStatus) => {
+                await supabase.from('orders').update({ status: newStatus }).eq('id', id);
+                alert(`✅ 狀態已更新為：「${newStatus}」\n已同步紀錄！`);
+                loadOrders();
+                if(onSaved) onSaved();
+            };
+
+            const openLogistics = async (orderId) => {
+                setViewingLogistics(orderId);
+                setIsLoadingLogistics(true);
+                const { data } = await supabase
+                    .from('logistics_records')
+                    .select('*')
+                    .eq('order_id', orderId)
+                    .order('created_at', { ascending: false });
+                setLogisticsRecords(data || []);
+                setIsLoadingLogistics(false);
+            };
+
+            const closeLogistics = () => {
+                setViewingLogistics(null);
+                setLogisticsRecords([]);
+            };
+
+            let displayedOrders = [...orders];
+            if (filter === '待處理') displayedOrders = displayedOrders.filter(o => o.status === '待處理' || o.status === '已下單');
+            else if (filter === '運送中') displayedOrders = displayedOrders.filter(o => o.status.includes('運送中') || o.status.includes('取貨中') || o.status.includes('收件'));
+            else if (filter === '已送達') displayedOrders = displayedOrders.filter(o => o.status === '已送達' || o.status === '已完成');
+            else if (filter === '退貨') displayedOrders = displayedOrders.filter(o => o.status.includes('退貨') || o.status === '已送達農夫');
+
+            displayedOrders.sort((a, b) => {
+                const aIsDone = a.status === '已完成' || a.status.includes('結案');
+                const bIsDone = b.status === '軟已完成' || b.status.includes('結案');
+               
+                if (aIsDone && !bIsDone) return 1;  
+                if (!aIsDone && bIsDone) return -1;
+               
+                return new Date(b.created_at) - new Date(a.created_at);
+            });
+
+            return (
+                <div className="max-w-6xl mx-auto space-y-10 animate-fade text-left text-dark">
+                    <div className="flex justify-between items-end">
+                        <h2 className="text-3xl font-black text-dark">📦 訂單與物流管理系統</h2>
+                        <div className="flex gap-4">
+                            <select className="agri-input w-56 shadow-sm font-bold text-gray-500 cursor-pointer" value={filter} onChange={e=>setFilter(e.target.value)}>
+                                <option value="all">全部訂單</option>
+                                <option value="待處理">篩選：待處理</option>
+                                <option value="運送中">篩選：運送中 (含取貨中)</option>
+                                <option value="已送達">篩選：已送達/已完成</option>
+                                <option value="退貨">篩選：退貨相關</option>
+                            </select>
+                            <button onClick={handleRefresh} disabled={isRefreshing} className={`bg-white border text-gray-500 px-6 py-3 rounded-2xl font-bold hover:bg-gray-50 shadow-sm transition ${isRefreshing ? 'opacity-50 cursor-not-allowed' : ''}`}>
+                                {isRefreshing ? '🔄 更新中...' : '🔄 重新整理'}
+                            </button>
+                        </div>
+                    </div>
+                    <div className="grid grid-cols-1 gap-6">
+                        {displayedOrders.length === 0 ? (
+                            <div className="bg-white py-32 rounded-[40px] border shadow-sm text-center text-gray-400 font-bold text-xl">此狀態下尚無訂單資料</div>
+                        ) : displayedOrders.map(o => (
+                            <div key={o.id} className={`bg-white p-10 rounded-[40px] shadow-sm border flex justify-between items-center gap-6 ${o.status.includes('結案') || o.status === '已完成' ? 'opacity-50 grayscale bg-gray-100' : ''} ${o.status === '退貨申請中' ? 'border-rose-300 bg-rose-50/30' : ''}`}>
+                                <div className="flex-1">
+                                    <h3 className="text-xl font-black text-dark mb-3">
+                                        訂單編號: {o.order_id}
+                                        <span className={`text-sm ml-3 px-4 py-1.5 rounded-full border ${o.status.includes('退貨') || o.status === '已送達農夫' ? 'bg-rose-50 text-rose-600 border-rose-200' : 'bg-green-50 text-primary border-green-100'}`}>
+                                            {o.status}
+                                        </span>
+                                    </h3>
+                                    <p className="text-sm font-bold text-rose-600 mb-3">
+                                        📦 物流追蹤包裹號：{o.package_id || '等待物流收件中'}
+                                    </p>
+                                    <div className="flex gap-10 mb-4">
+                                        <p className="text-gray-500 font-bold">👤 買家帳號: {o.buyer_account}</p>
+                                        <p className="text-rose-500 font-black">💳 付款方式: {o.payment_method}</p>
+                                    </div>
+                                    <div className="bg-gray-50 p-5 rounded-2xl border border-gray-100">
+                                        <p className="font-black text-sm text-gray-400 mb-2 uppercase tracking-widest">購買商品明細：</p>
+                                        <div className="flex flex-col gap-1">
+                                            {o.items && o.items.map((i, idx) => <p key={idx} className="font-bold text-dark text-[15px]">{i.name} <span className="text-primary mx-2">x</span> {i.qty}</p>)}
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex flex-col items-end gap-4 min-w-[240px] border-l pl-8 py-2 border-gray-100">
+                                    <p className="text-sm text-gray-400 font-bold">訂單總計金額</p>
+                                    <p className="text-4xl font-black text-dark mb-2">NT$ {o.total_amount}</p>
+                                   
+                                    {(o.status === '待處理' || o.status === '已下單') && (
+                                        <button onClick={() => notifyLogistics(o.id, '待物流收件')} className="btn-primary w-full py-4 text-lg shadow-xl animate-pulse">
+                                            📦 包裝完成，通知取件
+                                        </button>
+                                    )}
+                                    {o.status === '待物流收件' && (
+                                        <div className="w-full py-4 text-center bg-orange-100 text-orange-600 rounded-[15px] font-black border border-orange-200">
+                                            ⏳ 等待物流司機取件...
+                                        </div>
+                                    )}
+                                   
+                                    {(o.status === '物流已取件，運送中' || o.status.includes('轉運') || o.status === '配送中' || o.status === '已送達' || o.status.includes('退貨') || o.status === '已完成' || o.status === '已送達農夫') && (
+                                        <button onClick={() => openLogistics(o.order_id)} className="w-full py-4 text-center bg-blue-50 hover:bg-blue-100 text-blue-600 rounded-[15px] font-black border border-blue-200 transition shadow-sm cursor-pointer flex justify-center items-center gap-2">
+                                            🚚 點擊追蹤物流明細
+                                        </button>
+                                    )}
+                                   
+                                    {o.status === '退貨申請中' && (
+                                        <button onClick={() => notifyLogistics(o.id, '退貨取件中')} className="w-full py-4 mt-2 bg-rose-600 hover:bg-rose-700 text-white rounded-[15px] font-black shadow-xl transition animate-pulse">
+                                            聯繫物流進行上門取貨
+                                        </button>
+                                    )}
+                                    {o.status === '退貨運送中' && (
+                                        <div className="w-full py-4 mt-2 text-center bg-orange-50 text-orange-600 rounded-[15px] font-black border border-orange-200">
+                                            🚚 退貨商品運送中...
+                                        </div>
+                                    )}
+                                    {o.status === '已送達農夫' && (
+                                        <button onClick={() => notifyLogistics(o.id, '已退貨結案')} className="w-full py-4 mt-2 bg-gray-800 hover:bg-black text-white rounded-[15px] font-black shadow-xl transition animate-pulse">
+                                            確認收到退貨商品 (結單)
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+
+                    {viewingLogistics && (
+                        <div className="fixed inset-0 bg-black/60 z-[200] flex items-center justify-center p-6 backdrop-blur-sm text-left">
+                            <div className="bg-white p-10 rounded-[40px] max-w-lg w-full shadow-2xl animate-fade flex flex-col max-h-[85vh]">
+                                <div className="flex justify-between items-center mb-6 border-b pb-4">
+                                    <h3 className="text-2xl font-black text-primary flex items-center gap-3">
+                                        <span className="text-3xl">🚚</span> 物流追蹤明細
+                                    </h3>
+                                    <button onClick={closeLogistics} className="text-gray-400 hover:text-rose-500 text-3xl font-black">&times;</button>
+                                </div>
+                                <div className="overflow-y-auto no-scrollbar flex-1 pr-2">
+                                    {isLoadingLogistics ? (
+                                        <p className="text-center text-gray-400 font-bold py-10">🔄 正在載入物流軌跡...</p>
+                                    ) : logisticsRecords.length === 0 ? (
+                                        <p className="text-center text-gray-400 font-bold py-10">目前尚無物流軌跡資料。</p>
+                                    ) : (
+                                        <div className="border-l-4 border-primary ml-4 pl-6 relative space-y-8 py-4">
+                                            {logisticsRecords.map((rec, idx) => (
+                                                <div key={idx} className={`relative bg-gray-50 p-5 rounded-2xl border ${idx === 0 ? 'border-primary shadow-sm' : 'border-gray-100'}`}>
+                                                    <div className="absolute -left-[35px] top-4 w-4 h-4 bg-primary rounded-full border-4 border-white shadow-sm"></div>
+                                                    <div className="text-xs text-gray-400 font-bold mb-1">{new Date(rec.created_at).toLocaleString('zh-TW')}</div>
+                                                    <div className="text-lg font-black text-dark mb-1">{rec.status}</div>
+                                                    <div className="text-sm font-bold text-primary mb-2">📍 {rec.location}</div>
+                                                    {rec.note && <div className="text-sm bg-rose-50 text-rose-600 px-3 py-2 rounded-xl mt-2 font-bold break-words">📝 備註：{rec.note}</div>}
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                <button onClick={closeLogistics} className="mt-6 bg-gray-100 hover:bg-gray-200 text-gray-600 font-black py-4 rounded-2xl transition w-full text-lg">關閉</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        }
+
+        function ChatView({ profile }) {
+            const [chats, setChats] = useState([]);
+            const [replyMsg, setReplyMsg] = useState({});
+           
+            const loadChats = async (showPrompt = false) => {
+                const { data } = await supabase.from('farm_chats').select('*').eq('farm_name', profile.farm_name).order('created_at', { ascending: true });
+                const grouped = {};
+                if(data) {
+                    data.forEach(msg => {
+                        if(!grouped[msg.buyer_account]) grouped[msg.buyer_account] = [];
+                        grouped[msg.buyer_account].push(msg);
+                    });
+                }
+                setChats(Object.entries(grouped));
+               
+                if (showPrompt) {
+                    alert("✅ 已同步最新客服訊息！");
+                }
+            };
+
+            useEffect(() => {
+                if (profile?.farm_name) loadChats();
+            }, [profile]);
+
+            const sendReply = async (buyer) => {
+                const msg = replyMsg[buyer];
+                if(!msg) return;
+                await supabase.from('farm_chats').insert([{ farm_name: profile.farm_name, buyer_account: buyer, message: msg, sender: 'farm' }]);
+                setReplyMsg({...replyMsg, [buyer]: ''});
+                loadChats();
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto space-y-10 animate-fade text-left text-dark">
+                    <div className="flex justify-between items-end">
+                        <h2 className="text-3xl font-black text-dark">💬 線上客服管理</h2>
+                        <button onClick={() => loadChats(true)} className="bg-white border text-gray-500 px-6 py-3 rounded-2xl font-bold hover:bg-gray-50 shadow-sm transition">🔄 檢查新訊息</button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-8">
+                        {chats.length === 0 ? (
+                            <div className="col-span-2 bg-white py-32 rounded-[40px] border shadow-sm text-center text-gray-400 font-bold text-xl">目前尚無買家傳送訊息</div>
+                        ) : chats.map(([buyer, msgs]) => (
+                            <div key={buyer} className="bg-white p-8 rounded-[40px] shadow-sm border flex flex-col gap-6">
+                                <h3 className="text-xl font-black text-primary border-b border-gray-100 pb-4">消費者: {buyer}</h3>
+                                <div className="h-72 overflow-y-auto p-6 bg-[#F8FAF9] border border-gray-100 rounded-[25px] flex flex-col gap-4">
+                                    {msgs.map(m => (
+                                        <div key={m.id} className={`p-4 rounded-[20px] max-w-[85%] text-[15px] font-bold leading-relaxed shadow-sm ${m.sender === 'farm' ? 'bg-primary text-white self-end rounded-br-sm' : 'bg-white text-dark border border-gray-200 self-start rounded-bl-sm'}`}>
+                                            {m.message}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-4">
+                                    <input className="agri-input flex-1 py-4 text-lg" value={replyMsg[buyer] || ''} onChange={e => setReplyMsg({...replyMsg, [buyer]: e.target.value})} placeholder="輸入回覆內容..." />
+                                    <button className="btn-primary px-8 text-lg font-black" onClick={() => sendReply(buyer)}>送出</button>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            );
+        }
+
+        function ProfileEditView({ profile, email, onSaved, addActivity }) {
+            const [form, setForm] = useState(profile);
+            const update = async () => {
+                const { error } = await supabase.from('farm_profiles').update(form).eq('email', email);
+                if(!error) { await addActivity(`⚙️ 更新帳戶設定`); alert("✅ 儲存成功"); onSaved(); }
+            };
+            return (
+                <div className="max-w-2xl mx-auto bg-white p-12 rounded-[50px] shadow-sm border text-left animate-fade text-dark">
+                    <h2 className="text-3xl font-black text-dark mb-10 tracking-tighter text-left">帳戶資料設定</h2>
+                    <div className="space-y-8 text-dark text-left">
+                        <FormField label="農場名稱" value={form.farm_name} onChange={v=>setForm({...form, farm_name:v})} />
+                        <FormField label="負責人姓名" value={form.owner_name} onChange={v=>setForm({...form, owner_name:v})} />
+                        <FormField label="農場聯絡電話" value={form.phone} onChange={v=>setForm({...form, phone:v})} />
+                        <div className="flex flex-col gap-3 text-left">
+                            <label className="text-sm font-bold text-gray-500 uppercase font-black text-left text-dark">農場詳細介紹</label>
+                            <textarea rows="5" className="agri-input resize-none" value={form.description} onChange={e=>setForm({...form, description:e.target.value})}></textarea>
+                        </div>
+                        <button onClick={update} className="btn-primary w-full py-5 text-xl shadow-xl font-black">確認儲存更新</button>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
