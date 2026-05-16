@@ -54,9 +54,8 @@
         const SUPABASE_KEY = "sb_publishable_O0cHsOP6Gf6kBkZlyeGf3A_I1NV7qA-";                    
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        const CONTRACT_ADDRESS = "0x77353bb4fadeD5BEE941e2c17B812DbCF573D0D8";
+        const CONTRACT_ADDRESS = "0xD607134A2d2A09C48c9d93A4659B128a00395b00";
         const CONTRACT_ABI = [
-            [
   {
     "inputs": [
       {
@@ -115,11 +114,6 @@
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
-  },
-  {
-    "inputs": [],
-    "stateMutability": "nonpayable",
-    "type": "constructor"
   },
   {
     "inputs": [
@@ -181,8 +175,7 @@
     "stateMutability": "view",
     "type": "function"
   }
-]
-        ];
+];
 
         const Icon = ({ name, className = "w-5 h-5" }) => {
             const emojiMap = {
