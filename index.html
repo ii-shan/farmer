@@ -56,11 +56,132 @@
 
         const CONTRACT_ADDRESS = "0xe30736AFDC99983B37f3D6B375726Ed690855552";
         const CONTRACT_ABI = [
-            "function createProduct(string _id, string _name)",
-            "function addRecord(string _id, string _desc, string _date, string _handler)",
-            "function lockProduct(string _id)",
-            "function getHistoryCount(string _id) view returns (uint256)",
-            "function getProductHistory(string _id) view returns (tuple(string statusDesc, string statusDate, uint256 inputTime, string handler)[])"
+            [
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_id",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_desc",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_date",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_handler",
+        "type": "string"
+      }
+    ],
+    "name": "addRecord",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_id",
+        "type": "string"
+      },
+      {
+        "internalType": "string",
+        "name": "_name",
+        "type": "string"
+      }
+    ],
+    "name": "createProduct",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_id",
+        "type": "string"
+      }
+    ],
+    "name": "lockProduct",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "stateMutability": "nonpayable",
+    "type": "constructor"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_id",
+        "type": "string"
+      }
+    ],
+    "name": "getHistoryCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "string",
+        "name": "_id",
+        "type": "string"
+      }
+    ],
+    "name": "getProductHistory",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "string",
+            "name": "statusDesc",
+            "type": "string"
+          },
+          {
+            "internalType": "string",
+            "name": "statusDate",
+            "type": "string"
+          },
+          {
+            "internalType": "uint256",
+            "name": "inputTime",
+            "type": "uint256"
+          },
+          {
+            "internalType": "string",
+            "name": "handler",
+            "type": "string"
+          }
+        ],
+        "internalType": "struct AgriTrace.Record[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+]
         ];
 
         const Icon = ({ name, className = "w-5 h-5" }) => {
