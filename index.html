@@ -54,11 +54,13 @@
         const SUPABASE_KEY = "sb_publishable_O0cHsOP6Gf6kBkZlyeGf3A_I1NV7qA-";                    
         const supabase = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-        const CONTRACT_ADDRESS = "0xC8eF996d1A6C5AC876EFdBE2A97b19101a27fAF8";
+        const CONTRACT_ADDRESS = "0xe30736AFDC99983B37f3D6B375726Ed690855552";
         const CONTRACT_ABI = [
-            "function createProduct(string _id, string _name) public",
-            "function addRecord(string _id, string _desc, string _date, string _handler) public",
-            "function lockProduct(string _id) public"
+            "function createProduct(string _id, string _name)",
+            "function addRecord(string _id, string _desc, string _date, string _handler)",
+            "function lockProduct(string _id)",
+            "function getHistoryCount(string _id) view returns (uint256)",
+            "function getProductHistory(string _id) view returns (tuple(string statusDesc, string statusDate, uint256 inputTime, string handler)[])"
         ];
 
         const Icon = ({ name, className = "w-5 h-5" }) => {
